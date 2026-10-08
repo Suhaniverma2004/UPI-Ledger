@@ -79,6 +79,20 @@ public class OutboxEvent {
     public String getLastError() { return lastError; }
     public Instant getCreatedAt() { return createdAt; }
 
+    public void markProcessing(Instant attemptAt) {
+        this.status = OutboxStatus.PROCESSING;
+        this.lastAttemptAt = attemptAt;
+    }
+
+    public void releaseForRetry(Instant attemptAt, String error) {
+        this.status = OutboxStatus.FAILED;
+        this.attemptCount++;
+        this.lastAttemptAt = attemptAt;
+        this.lastError = error == null
+                ? null
+                : error.substring(0, Math.min(error.length(), 2000));
+    }
+
     public void markPublished(Instant publishedAt) {
         this.status = OutboxStatus.PUBLISHED;
         this.publishedAt = publishedAt;
