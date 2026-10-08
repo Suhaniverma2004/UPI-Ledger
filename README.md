@@ -74,3 +74,11 @@ The V1 test suite is intentionally infrastructure-free. `mvn clean test` does no
 ## V2 — Database & Financial Schema
 
 V2 adds the PostgreSQL/Flyway financial data model: accounts, balance projections, authorization holds, payment transactions, immutable ledger entries, transaction events, idempotency records, transactional outbox records, and reconciliation records. It also adds a deferred PostgreSQL constraint trigger enforcing the double-entry invariant per `posting_id` and currency. Business workflows are intentionally deferred to later versions.
+
+## V3 — Double-Entry Ledger Engine
+
+V3 adds the core accounting engine. Ledger postings are represented as balanced debit/credit lines under a single `posting_id`. The posting service executes inside a database transaction, locks account-balance rows in deterministic order, updates the materialized balance projection, and persists ledger entries atomically.
+
+Wallet balances use positive customer-funds semantics: a debit reduces the wallet balance and a credit increases it. The PostgreSQL deferred constraint trigger from V2 remains the database-level backstop for the double-entry invariant.
+
+V3 does not implement the payment lifecycle, Kafka publishing, Redis locking, or REST APIs yet. Those arrive in later versions.

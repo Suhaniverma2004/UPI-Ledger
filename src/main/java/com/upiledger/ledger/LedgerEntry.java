@@ -14,32 +14,36 @@ import java.util.UUID;
 public class LedgerEntry {
     @Id @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-
-    @Column(name = "posting_id", nullable = false)
-    private UUID postingId;
-
-    @Column(name = "transaction_id", nullable = false)
-    private UUID transactionId;
-
-    @Column(name = "account_id", nullable = false)
-    private UUID accountId;
-
-    @Column(nullable = false, length = 3)
-    private String currency;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private LedgerEntryType entryType;
-
-    @Column(nullable = false, precision = 18, scale = 4)
-    private BigDecimal amount;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private LedgerEntryReason reason;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
+    @Column(name = "posting_id", nullable = false) private UUID postingId;
+    @Column(name = "transaction_id", nullable = false) private UUID transactionId;
+    @Column(name = "account_id", nullable = false) private UUID accountId;
+    @Column(nullable = false, length = 3) private String currency;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 10) private LedgerEntryType entryType;
+    @Column(nullable = false, precision = 18, scale = 4) private BigDecimal amount;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private LedgerEntryReason reason;
+    @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
 
     protected LedgerEntry() {}
+
+    public LedgerEntry(UUID postingId, UUID transactionId, UUID accountId, String currency,
+                       LedgerEntryType entryType, BigDecimal amount, LedgerEntryReason reason) {
+        this.postingId = postingId;
+        this.transactionId = transactionId;
+        this.accountId = accountId;
+        this.currency = currency;
+        this.entryType = entryType;
+        this.amount = amount;
+        this.reason = reason;
+        this.createdAt = Instant.now();
+    }
+
+    public UUID getId() { return id; }
+    public UUID getPostingId() { return postingId; }
+    public UUID getTransactionId() { return transactionId; }
+    public UUID getAccountId() { return accountId; }
+    public String getCurrency() { return currency; }
+    public LedgerEntryType getEntryType() { return entryType; }
+    public BigDecimal getAmount() { return amount; }
+    public LedgerEntryReason getReason() { return reason; }
+    public Instant getCreatedAt() { return createdAt; }
 }
