@@ -29,4 +29,35 @@ public class AccountBalance {
     private Instant updatedAt;
 
     protected AccountBalance() {}
+
+    public AccountBalance(UUID accountId, String currency) {
+        this.accountId = accountId;
+        this.currency = currency;
+        this.committedBalance = BigDecimal.ZERO;
+        this.availableBalance = BigDecimal.ZERO;
+        this.updatedAt = Instant.now();
+    }
+
+    public UUID getAccountId() { return accountId; }
+    public BigDecimal getCommittedBalance() { return committedBalance; }
+    public BigDecimal getAvailableBalance() { return availableBalance; }
+    public String getCurrency() { return currency; }
+    public long getVersion() { return version; }
+
+    public void applyDebit(BigDecimal amount) {
+        BigDecimal newCommitted = committedBalance.subtract(amount);
+        BigDecimal newAvailable = availableBalance.subtract(amount);
+        if (newCommitted.signum() < 0 || newAvailable.signum() < 0) {
+            throw new InsufficientBalanceException(accountId, amount);
+        }
+        committedBalance = newCommitted;
+        availableBalance = newAvailable;
+        updatedAt = Instant.now();
+    }
+
+    public void applyCredit(BigDecimal amount) {
+        committedBalance = committedBalance.add(amount);
+        availableBalance = availableBalance.add(amount);
+        updatedAt = Instant.now();
+    }
 }
