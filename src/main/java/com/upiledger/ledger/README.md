@@ -1,3 +1,2 @@
-# Ledger module
-
-Double-entry accounting and posting logic will live here.
+# Ledger
+Owns immutable financial postings. Double-entry is enforced by a deferred PostgreSQL constraint trigger.

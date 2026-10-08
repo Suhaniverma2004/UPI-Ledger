@@ -1,3 +1,2 @@
-# Accounts module
-
-Wallet accounts, holds, and balance projections will live here.
+# Accounts
+Owns accounts, balance projections, and authorization holds. Holds are not ledger entries.

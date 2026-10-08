@@ -1,3 +1,2 @@
-# Eventing module
-
-Transactional outbox and Kafka integration will live here.
+# Eventing
+Owns transaction events and the transactional outbox schema. Kafka publishing is introduced in V5.

@@ -1,3 +1,2 @@
-# Idempotency module
-
-Durable idempotency handling will live here.
+# Idempotency
+Owns persisted idempotency keys and request fingerprints. Processing logic is introduced later.
