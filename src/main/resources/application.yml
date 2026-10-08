@@ -54,3 +54,8 @@ server:
   error:
     include-message: never
     include-binding-errors: never
+
+upiledger:
+  idempotency:
+    redis-ttl-seconds: 86400
+    processing-ttl-seconds: 30

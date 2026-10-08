@@ -7,22 +7,69 @@ import com.upiledger.eventing.OutboxEventService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.math.BigDecimal; import java.nio.charset.StandardCharsets; import java.security.MessageDigest; import java.time.Instant; import java.time.temporal.ChronoUnit; import java.util.UUID;
+import java.math.BigDecimal; import java.time.Duration; import java.nio.charset.StandardCharsets; import java.security.MessageDigest; import java.time.Instant; import java.time.temporal.ChronoUnit; import java.util.UUID;
 
 @Service
 public class PaymentService {
- private final PaymentTransactionRepository transactions; private final AccountBalanceRepository balances; private final AccountHoldRepository holds; private final LedgerPostingService ledger; private final IdempotencyKeyRepository idempotency; private final OutboxEventService outbox;
- public PaymentService(PaymentTransactionRepository transactions,AccountBalanceRepository balances,AccountHoldRepository holds,LedgerPostingService ledger,IdempotencyKeyRepository idempotency,OutboxEventService outbox){this.transactions=transactions;this.balances=balances;this.holds=holds;this.ledger=ledger;this.idempotency=idempotency;this.outbox=outbox;}
+ private final PaymentTransactionRepository transactions; private final AccountBalanceRepository balances; private final AccountHoldRepository holds; private final LedgerPostingService ledger; private final IdempotencyKeyRepository idempotency; private final OutboxEventService outbox; private final RedisIdempotencyService redisIdempotency;
+ @org.springframework.beans.factory.annotation.Autowired
+ public PaymentService(PaymentTransactionRepository transactions,AccountBalanceRepository balances,AccountHoldRepository holds,LedgerPostingService ledger,IdempotencyKeyRepository idempotency,OutboxEventService outbox,RedisIdempotencyService redisIdempotency){this.transactions=transactions;this.balances=balances;this.holds=holds;this.ledger=ledger;this.idempotency=idempotency;this.outbox=outbox;this.redisIdempotency=redisIdempotency;}
+ public PaymentService(PaymentTransactionRepository transactions,AccountBalanceRepository balances,AccountHoldRepository holds,LedgerPostingService ledger,IdempotencyKeyRepository idempotency,OutboxEventService outbox){this(transactions,balances,holds,ledger,idempotency,outbox,null);}
  @Transactional
  public PaymentTransaction create(CreatePaymentCommand c,String idempotencyKey){
   String hash=hash(c);
+  if(redisIdempotency!=null){
+   var cached=redisIdempotency.lookup(idempotencyKey,hash);
+   if(cached.status()==RedisIdempotencyService.Result.Status.COMPLETED){
+    return transactions.findById(cached.resourceId()).orElseThrow();
+   }
+   if(cached.status()==RedisIdempotencyService.Result.Status.PROCESSING){
+    var authoritative=idempotency.findByIdempotencyKey(idempotencyKey);
+    if(authoritative.isEmpty()) throw new IdempotencyInProgressException();
+   }
+  }
+
   var existing=idempotency.findByIdempotencyKey(idempotencyKey);
-  if(existing.isPresent()){if(!existing.get().getRequestHash().equals(hash)) throw new IdempotencyConflictException(); if(existing.get().getResourceId()!=null) return transactions.findById(existing.get().getResourceId()).orElseThrow();}
-  var tx=transactions.findByExternalTxnId(c.externalTxnId()).orElse(null);
-  if(tx!=null){if(!same(tx,c)) throw new IllegalArgumentException("external_txn_id already belongs to a different payment"); return tx;}
-  tx=transactions.save(new PaymentTransaction(c.externalTxnId(),c.payerAccountId(),c.payeeAccountId(),c.amount(),c.currency()));
-  try{IdempotencyKey key=existing.orElseGet(()->idempotency.save(new IdempotencyKey(idempotencyKey,hash,Instant.now().plus(24,ChronoUnit.HOURS)))); key.complete(tx.getId(),201,"{\"transactionId\":\""+tx.getId()+"\"}"); idempotency.save(key);}catch(DataIntegrityViolationException e){throw new IdempotencyConflictException();}
-  emit(tx,"PAYMENT_INITIATED"); return tx;
+  if(existing.isPresent()){
+   if(!existing.get().getRequestHash().equals(hash)) throw new IdempotencyConflictException();
+   if(existing.get().getResourceId()!=null){
+    var result=transactions.findById(existing.get().getResourceId()).orElseThrow();
+    if(redisIdempotency!=null) redisIdempotency.cacheCompleted(idempotencyKey,hash,result.getId(),Duration.ofHours(24));
+    return result;
+   }
+  }
+
+  boolean redisLockAcquired=true;
+  if(redisIdempotency!=null){
+   redisLockAcquired=redisIdempotency.tryAcquire(idempotencyKey,hash,Duration.ofSeconds(30));
+   if(!redisLockAcquired){
+    existing=idempotency.findByIdempotencyKey(idempotencyKey);
+    if(existing.isPresent() && existing.get().getResourceId()!=null){
+     var result=transactions.findById(existing.get().getResourceId()).orElseThrow();
+     redisIdempotency.cacheCompleted(idempotencyKey,hash,result.getId(),Duration.ofHours(24));
+     return result;
+    }
+    throw new IdempotencyInProgressException();
+   }
+  }
+
+  try{
+   existing=idempotency.findByIdempotencyKey(idempotencyKey);
+   if(existing.isPresent()){
+    if(!existing.get().getRequestHash().equals(hash)) throw new IdempotencyConflictException();
+    if(existing.get().getResourceId()!=null) return transactions.findById(existing.get().getResourceId()).orElseThrow();
+   }
+   var tx=transactions.findByExternalTxnId(c.externalTxnId()).orElse(null);
+   if(tx!=null){if(!same(tx,c)) throw new IllegalArgumentException("external_txn_id already belongs to a different payment"); return tx;}
+   tx=transactions.save(new PaymentTransaction(c.externalTxnId(),c.payerAccountId(),c.payeeAccountId(),c.amount(),c.currency()));
+   try{IdempotencyKey key=existing.orElseGet(()->idempotency.save(new IdempotencyKey(idempotencyKey,hash,Instant.now().plus(24,ChronoUnit.HOURS)))); key.complete(tx.getId(),201,"{\"transactionId\":\""+tx.getId()+"\"}"); idempotency.save(key);}catch(DataIntegrityViolationException e){throw new IdempotencyConflictException();}
+   emit(tx,"PAYMENT_INITIATED");
+   if(redisIdempotency!=null) redisIdempotency.cacheCompleted(idempotencyKey,hash,tx.getId(),Duration.ofHours(24));
+   return tx;
+  } catch(RuntimeException ex) {
+   if(redisIdempotency!=null) redisIdempotency.release(idempotencyKey,hash);
+   throw ex;
+  }
  }
  @Transactional
  public PaymentTransaction authorize(UUID id){PaymentTransaction tx=get(id); if(tx.getStatus()!=TransactionStatus.INITIATED) throw new InvalidPaymentStateException(tx.getStatus(),TransactionStatus.AUTHORIZED); AccountBalance b=lock(tx.getPayerAccountId()); if(!b.getCurrency().equals(tx.getCurrency())) throw new IllegalArgumentException("Currency mismatch"); b.reserve(tx.getAmount()); balances.save(b); holds.save(new AccountHold(tx.getId(),tx.getPayerAccountId(),tx.getAmount(),tx.getCurrency())); tx.transitionTo(TransactionStatus.AUTHORIZED); tx=transactions.save(tx); emit(tx,"PAYMENT_AUTHORIZED"); return tx;}
