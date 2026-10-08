@@ -70,3 +70,7 @@ mvn clean verify
 
 The V1 test suite is intentionally infrastructure-free. `mvn clean test` does not require PostgreSQL, Redis, Kafka, or Docker. Integration tests that exercise the real PostgreSQL schema and infrastructure will be introduced in later implementation stages using Testcontainers.
 
+
+## V2 — Database & Financial Schema
+
+V2 adds the PostgreSQL/Flyway financial data model: accounts, balance projections, authorization holds, payment transactions, immutable ledger entries, transaction events, idempotency records, transactional outbox records, and reconciliation records. It also adds a deferred PostgreSQL constraint trigger enforcing the double-entry invariant per `posting_id` and currency. Business workflows are intentionally deferred to later versions.

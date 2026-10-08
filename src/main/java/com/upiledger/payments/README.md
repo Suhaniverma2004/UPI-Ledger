@@ -1,3 +1,2 @@
-# Payments module
-
-Payment lifecycle and application services will live here.
+# Payments
+Owns payment transactions and lifecycle state. Business services are introduced in V4.
