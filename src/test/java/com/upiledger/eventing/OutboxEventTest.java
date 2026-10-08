@@ -16,7 +16,8 @@ class OutboxEventTest {
 
         assertTrue(event.isRetryEligible(
                 Instant.parse("2026-10-09T01:00:00Z"),
-                Duration.ofSeconds(5)
+                Duration.ofSeconds(5),
+                5
         ));
     }
 
@@ -27,10 +28,7 @@ class OutboxEventTest {
 
         event.markFailed(attempt, "Kafka unavailable");
 
-        assertFalse(event.isRetryEligible(
-                Instant.parse("2026-10-09T01:00:04Z"),
-                Duration.ofSeconds(5)
-        ));
+        assertFalse(event.isRetryEligible(Instant.parse("2026-10-09T01:00:04Z"), Duration.ofSeconds(5), 5));
     }
 
     @Test
@@ -40,9 +38,43 @@ class OutboxEventTest {
 
         event.markFailed(attempt, "Kafka unavailable");
 
+        assertTrue(event.isRetryEligible(Instant.parse("2026-10-09T01:00:05Z"), Duration.ofSeconds(5), 5));
+    }
+
+    @Test
+    void failedEventUsesExponentialBackoff() {
+        var event = new OutboxEvent();
+        Instant firstAttempt = Instant.parse("2026-10-09T01:00:00Z");
+
+        event.markFailed(firstAttempt, "Kafka unavailable");
+        event.markFailed(Instant.parse("2026-10-09T01:00:05Z"), "Kafka unavailable");
+
+        assertFalse(event.isRetryEligible(
+                Instant.parse("2026-10-09T01:00:14Z"),
+                Duration.ofSeconds(5),
+                5
+        ));
+
         assertTrue(event.isRetryEligible(
-                Instant.parse("2026-10-09T01:00:05Z"),
-                Duration.ofSeconds(5)
+                Instant.parse("2026-10-09T01:00:15Z"),
+                Duration.ofSeconds(5),
+                5
+        ));
+    }
+
+    @Test
+    void failedEventStopsRetryingAtMaximumAttempts() {
+        var event = new OutboxEvent();
+        Instant attempt = Instant.parse("2026-10-09T01:00:00Z");
+
+        for (int i = 0; i < 5; i++) {
+            event.markFailed(attempt.plusSeconds(i * 5L), "Kafka unavailable");
+        }
+
+        assertFalse(event.isRetryEligible(
+                Instant.parse("2026-10-09T02:00:00Z"),
+                Duration.ofSeconds(5),
+                5
         ));
     }
 

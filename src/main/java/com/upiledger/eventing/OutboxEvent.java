@@ -92,18 +92,25 @@ public class OutboxEvent {
         this.lastError = error == null ? null : error.substring(0, Math.min(error.length(), 2000));
     }
 
-    public boolean isRetryEligible(Instant now, Duration retryDelay) {
+    public boolean isRetryEligible(
+            Instant now,
+            Duration baseRetryDelay,
+            int maxAttempts
+    ) {
         if (status == OutboxStatus.PENDING) {
             return true;
         }
 
-        if (status != OutboxStatus.FAILED) {
+        if (status != OutboxStatus.FAILED || lastAttemptAt == null) {
             return false;
         }
 
-        if (lastAttemptAt == null) {
-            return true;
+        if (attemptCount >= maxAttempts) {
+            return false;
         }
+
+        long multiplier = 1L << Math.min(Math.max(attemptCount - 1, 0), 30);
+        Duration retryDelay = baseRetryDelay.multipliedBy(multiplier);
 
         return !lastAttemptAt.plus(retryDelay).isAfter(now);
     }

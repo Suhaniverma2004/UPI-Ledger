@@ -20,6 +20,9 @@ public class OutboxPublisher {
     @Value("${upiledger.outbox.publisher.retry-delay-ms:5000}")
     private long retryDelayMs;
 
+    @Value("${upiledger.outbox.publisher.max-attempts:5}")
+    private int maxAttempts;
+
     public OutboxPublisher(OutboxEventRepository repository,
                            KafkaTemplate<String, String> kafkaTemplate,
                            OutboxEventService outboxEventService,
@@ -39,7 +42,7 @@ public class OutboxPublisher {
         Duration retryDelay = Duration.ofMillis(retryDelayMs);
 
         for (OutboxEvent event : events) {
-            if (event.isRetryEligible(now, retryDelay)) {
+            if (event.isRetryEligible(now, retryDelay, maxAttempts)) {
                 publishOne(event);
             }
         }
