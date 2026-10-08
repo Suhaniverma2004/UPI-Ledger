@@ -41,6 +41,8 @@ upiledger:
   outbox:
     publisher:
       fixed-delay-ms: ${OUTBOX_PUBLISHER_FIXED_DELAY_MS:1000}
+      retry-delay-ms: ${OUTBOX_PUBLISHER_RETRY_DELAY_MS:5000}
+      max-attempts: ${OUTBOX_PUBLISHER_MAX_ATTEMPTS:5}
 
 management:
   endpoints:

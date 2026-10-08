@@ -3,6 +3,7 @@ package com.upiledger.eventing;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -78,6 +79,20 @@ public class OutboxEvent {
     public String getLastError() { return lastError; }
     public Instant getCreatedAt() { return createdAt; }
 
+    public void markProcessing(Instant attemptAt) {
+        this.status = OutboxStatus.PROCESSING;
+        this.lastAttemptAt = attemptAt;
+    }
+
+    public void releaseForRetry(Instant attemptAt, String error) {
+        this.status = OutboxStatus.FAILED;
+        this.attemptCount++;
+        this.lastAttemptAt = attemptAt;
+        this.lastError = error == null
+                ? null
+                : error.substring(0, Math.min(error.length(), 2000));
+    }
+
     public void markPublished(Instant publishedAt) {
         this.status = OutboxStatus.PUBLISHED;
         this.publishedAt = publishedAt;
@@ -89,5 +104,28 @@ public class OutboxEvent {
         this.attemptCount++;
         this.lastAttemptAt = attemptAt;
         this.lastError = error == null ? null : error.substring(0, Math.min(error.length(), 2000));
+    }
+
+    public boolean isRetryEligible(
+            Instant now,
+            Duration baseRetryDelay,
+            int maxAttempts
+    ) {
+        if (status == OutboxStatus.PENDING) {
+            return true;
+        }
+
+        if (status != OutboxStatus.FAILED || lastAttemptAt == null) {
+            return false;
+        }
+
+        if (attemptCount >= maxAttempts) {
+            return false;
+        }
+
+        long multiplier = 1L << Math.min(Math.max(attemptCount - 1, 0), 30);
+        Duration retryDelay = baseRetryDelay.multipliedBy(multiplier);
+
+        return !lastAttemptAt.plus(retryDelay).isAfter(now);
     }
 }

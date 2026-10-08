@@ -1,71 +1,34 @@
 package com.upiledger.eventing;
 
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 
 @Component
 public class OutboxPublisher {
-    private final OutboxEventRepository repository;
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final OutboxEventService outboxEventService;
-    private final KafkaTopics topics;
 
-    public OutboxPublisher(OutboxEventRepository repository,
-                           KafkaTemplate<String, String> kafkaTemplate,
-                           OutboxEventService outboxEventService,
-                           KafkaTopics topics) {
+    private final OutboxEventRepository repository;
+    private final OutboxPublishWorker worker;
+
+    public OutboxPublisher(
+            OutboxEventRepository repository,
+            OutboxPublishWorker worker
+    ) {
         this.repository = repository;
-        this.kafkaTemplate = kafkaTemplate;
-        this.outboxEventService = outboxEventService;
-        this.topics = topics;
+        this.worker = worker;
     }
 
     @Scheduled(fixedDelayString = "${upiledger.outbox.publisher.fixed-delay-ms:1000}")
     public void publishPendingEvents() {
-        List<OutboxEvent> events = repository.findTop100ByStatusInOrderByCreatedAtAsc(
-                List.of(OutboxStatus.PENDING, OutboxStatus.FAILED));
+        var events = repository.findNextClaimable(
+                List.of(OutboxStatus.PENDING, OutboxStatus.FAILED),
+                PageRequest.of(0, 100)
+        );
+
         for (OutboxEvent event : events) {
-            publishOne(event);
+            worker.claimAndPublish(event);
         }
-    }
-
-    @Transactional
-    public void publishOne(OutboxEvent event) {
-        try {
-            var envelope = new EventEnvelope(
-                    event.getId(),
-                    event.getEventType(),
-                    event.getAggregateType(),
-                    event.getAggregateId(),
-                    event.getCreatedAt(),
-                    event.getCorrelationId(),
-                    event.getPayload()
-            );
-
-            kafkaTemplate.send(
-                    topics.topicFor(event.getEventType()),
-                    event.getAggregateId().toString(),
-                    outboxEventService.serialize(envelope)
-            ).get();
-
-            event.markPublished(Instant.now());
-            repository.save(event);
-        } catch (Exception e) {
-            event.markFailed(Instant.now(), rootMessage(e));
-            repository.save(event);
-        }
-    }
-
-    private String rootMessage(Exception exception) {
-        Throwable current = exception;
-        while (current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 }

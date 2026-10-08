@@ -1,70 +1,47 @@
 package com.upiledger.eventing;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
-import java.lang.reflect.Field;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class OutboxPublisherTest {
+
     @Test
-    void publishesPendingEventAndMarksItPublished() throws Exception {
+    void delegatesClaimableEventsToWorker() {
         var repository = mock(OutboxEventRepository.class);
-        var kafka = mock(KafkaTemplate.class);
-        var serializer = mock(OutboxEventService.class);
-        var topics = mock(KafkaTopics.class);
-        UUID eventId = UUID.randomUUID();
-        UUID aggregateId = UUID.randomUUID();
-        var event = new OutboxEvent("PAYMENT", aggregateId, "PAYMENT_INITIATED", new ObjectMapperHelper().json("{\"amount\":500}"), UUID.randomUUID());
-        setId(event, eventId);
-        when(topics.topicFor("PAYMENT_INITIATED")).thenReturn("upiledger.payment.lifecycle.v1");
-        when(serializer.serialize(any())).thenReturn("{}");
-        CompletableFuture<SendResult<String, String>> future = CompletableFuture.completedFuture(null);
-        when(kafka.send(anyString(), anyString(), anyString())).thenReturn(future);
-        var publisher = new OutboxPublisher(repository, kafka, serializer, topics);
-        publisher.publishOne(event);
-        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
-        assertNotNull(event.getPublishedAt());
-        verify(kafka).send(eq("upiledger.payment.lifecycle.v1"), eq(aggregateId.toString()), eq("{}"));
-        verify(repository).save(event);
+        var worker = mock(OutboxPublishWorker.class);
+        var publisher = new OutboxPublisher(repository, worker);
+
+        var event = mock(OutboxEvent.class);
+        when(repository.findNextClaimable(
+                eq(List.of(OutboxStatus.PENDING, OutboxStatus.FAILED)),
+                any(Pageable.class)
+        )).thenReturn(List.of(event));
+
+        publisher.publishPendingEvents();
+
+        verify(worker).claimAndPublish(event);
     }
 
     @Test
-    void recordsFailureForKafkaPublishError() throws Exception {
+    void doesNothingWhenNoClaimableEventsExist() {
         var repository = mock(OutboxEventRepository.class);
-        var kafka = mock(KafkaTemplate.class);
-        var serializer = mock(OutboxEventService.class);
-        var topics = mock(KafkaTopics.class);
-        var event = new OutboxEvent("PAYMENT", UUID.randomUUID(), "PAYMENT_SETTLED", new ObjectMapperHelper().json("{\"amount\":500}"), UUID.randomUUID());
-        setId(event, UUID.randomUUID());
-        when(topics.topicFor("PAYMENT_SETTLED")).thenReturn("upiledger.payment.settled.v1");
-        when(serializer.serialize(any())).thenReturn("{}");
-        CompletableFuture<SendResult<String, String>> future = new CompletableFuture<>();
-        future.completeExceptionally(new IllegalStateException("Kafka unavailable"));
-        when(kafka.send(anyString(), anyString(), anyString())).thenReturn(future);
-        var publisher = new OutboxPublisher(repository, kafka, serializer, topics);
-        publisher.publishOne(event);
-        assertEquals(OutboxStatus.FAILED, event.getStatus());
-        assertEquals(1, event.getAttemptCount());
-        assertTrue(event.getLastError().contains("Kafka unavailable"));
-        verify(repository).save(event);
-    }
+        var worker = mock(OutboxPublishWorker.class);
+        var publisher = new OutboxPublisher(repository, worker);
 
-    private static void setId(OutboxEvent event, UUID id) throws Exception {
-        Field field = OutboxEvent.class.getDeclaredField("id");
-        field.setAccessible(true);
-        field.set(event, id);
-    }
+        when(repository.findNextClaimable(
+                eq(List.of(OutboxStatus.PENDING, OutboxStatus.FAILED)),
+                any(Pageable.class)
+        )).thenReturn(List.of());
 
-    private static final class ObjectMapperHelper {
-        private com.fasterxml.jackson.databind.JsonNode json(String value) throws Exception {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readTree(value);
-        }
+        publisher.publishPendingEvents();
+
+        verifyNoInteractions(worker);
     }
 }
