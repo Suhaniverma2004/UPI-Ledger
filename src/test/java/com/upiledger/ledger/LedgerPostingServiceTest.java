@@ -2,6 +2,7 @@ package com.upiledger.ledger;
 
 import com.upiledger.accounts.AccountBalance;
 import com.upiledger.accounts.AccountBalanceRepository;
+import com.upiledger.eventing.OutboxEventService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +25,9 @@ class LedgerPostingServiceTest {
 
     @Mock
     private AccountBalanceRepository accountBalanceRepository;
+
+    @Mock
+    private OutboxEventService outboxEventService;
 
     @Test
     void postsBalancedTransferAndUpdatesBothBalances() {
@@ -49,7 +53,7 @@ class LedgerPostingServiceTest {
                 )
         );
 
-        LedgerPostingService service = new LedgerPostingService(ledgerEntryRepository, accountBalanceRepository);
+        LedgerPostingService service = new LedgerPostingService(ledgerEntryRepository, accountBalanceRepository, outboxEventService);
 
         UUID postingId = service.post(command);
 
@@ -83,7 +87,7 @@ class LedgerPostingServiceTest {
                 )
         );
 
-        LedgerPostingService service = new LedgerPostingService(ledgerEntryRepository, accountBalanceRepository);
+        LedgerPostingService service = new LedgerPostingService(ledgerEntryRepository, accountBalanceRepository, outboxEventService);
 
         assertThrows(UnbalancedPostingException.class, () -> service.post(command));
         verifyNoInteractions(accountBalanceRepository, ledgerEntryRepository);
@@ -96,7 +100,6 @@ class LedgerPostingServiceTest {
 
         AccountBalance payer = new AccountBalance(payerId, "INR");
         AccountBalance payee = new AccountBalance(payeeId, "INR");
-       
 
         when(accountBalanceRepository.findByIdForUpdate(payerId)).thenReturn(Optional.of(payer));
         when(accountBalanceRepository.findByIdForUpdate(payeeId)).thenReturn(Optional.of(payee));
@@ -111,7 +114,7 @@ class LedgerPostingServiceTest {
                 )
         );
 
-        LedgerPostingService service = new LedgerPostingService(ledgerEntryRepository, accountBalanceRepository);
+        LedgerPostingService service = new LedgerPostingService(ledgerEntryRepository, accountBalanceRepository, outboxEventService);
 
         assertThrows(RuntimeException.class, () -> service.post(command));
         verify(ledgerEntryRepository, never()).save(any(LedgerEntry.class));

@@ -1,2 +1,3 @@
 package com.upiledger.eventing;
-public enum OutboxStatus { PENDING, PUBLISHED, FAILED }
+public enum OutboxStatus { PENDING,
+    PROCESSING, PUBLISHED, FAILED }

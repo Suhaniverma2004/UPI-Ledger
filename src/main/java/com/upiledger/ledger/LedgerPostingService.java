@@ -4,6 +4,7 @@ import com.upiledger.accounts.AccountBalance;
 import com.upiledger.accounts.AccountBalanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.upiledger.eventing.OutboxEventService;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -16,11 +17,14 @@ import java.util.stream.Collectors;
 public class LedgerPostingService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final AccountBalanceRepository accountBalanceRepository;
+    private final OutboxEventService outboxEventService;
 
     public LedgerPostingService(LedgerEntryRepository ledgerEntryRepository,
-                                AccountBalanceRepository accountBalanceRepository) {
+                                AccountBalanceRepository accountBalanceRepository,
+                                OutboxEventService outboxEventService) {
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.accountBalanceRepository = accountBalanceRepository;
+        this.outboxEventService = outboxEventService;
     }
 
     @Transactional
@@ -56,6 +60,20 @@ public class LedgerPostingService {
                     postingId, command.transactionId(), line.accountId(), command.currency(),
                     line.entryType(), line.amount(), command.reason()));
         }
+
+        outboxEventService.enqueue(
+                "LEDGER_POSTING",
+                command.transactionId(),
+                "LEDGER_ENTRY_POSTED",
+                Map.of(
+                        "postingId", postingId,
+                        "transactionId", command.transactionId(),
+                        "currency", command.currency(),
+                        "reason", command.reason().name(),
+                        "lines", lines
+                ),
+                UUID.randomUUID()
+        );
 
         return postingId;
     }

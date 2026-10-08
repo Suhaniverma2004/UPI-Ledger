@@ -23,6 +23,26 @@ spring:
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      enable-idempotence: true
+
+upiledger:
+  kafka:
+    topics:
+      payment-lifecycle: ${KAFKA_TOPIC_PAYMENT_LIFECYCLE:upiledger.payment.lifecycle.v1}
+      ledger-entry-posted: ${KAFKA_TOPIC_LEDGER_ENTRY_POSTED:upiledger.ledger.entry.posted.v1}
+      payment-settled: ${KAFKA_TOPIC_PAYMENT_SETTLED:upiledger.payment.settled.v1}
+      payment-failed: ${KAFKA_TOPIC_PAYMENT_FAILED:upiledger.payment.failed.v1}
+      payment-reversed: ${KAFKA_TOPIC_PAYMENT_REVERSED:upiledger.payment.reversed.v1}
+      dlq: ${KAFKA_TOPIC_DLQ:upiledger.dlq.v1}
+  outbox:
+    publisher:
+      fixed-delay-ms: ${OUTBOX_PUBLISHER_FIXED_DELAY_MS:1000}
+      retry-delay-ms: ${OUTBOX_PUBLISHER_RETRY_DELAY_MS:5000}
+      max-attempts: ${OUTBOX_PUBLISHER_MAX_ATTEMPTS:5}
 
 management:
   endpoints:
