@@ -10,7 +10,8 @@ import java.util.UUID;
     @Index(name = "idx_recon_discrepancy_batch", columnList = "batch_id")
 })
 public class ReconciliationDiscrepancy {
-    @Id @GeneratedValue(strategy = GenerationType.UUID)
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "batch_id", nullable = false)
@@ -32,4 +33,24 @@ public class ReconciliationDiscrepancy {
     private Instant createdAt;
 
     protected ReconciliationDiscrepancy() {}
+
+    public ReconciliationDiscrepancy(UUID batchId, UUID accountId,
+                                     BigDecimal expectedBalance,
+                                     BigDecimal actualBalance,
+                                     String description) {
+        this.batchId = batchId;
+        this.accountId = accountId;
+        this.expectedBalance = expectedBalance;
+        this.actualBalance = actualBalance;
+        this.description = description;
+        this.createdAt = Instant.now();
+    }
+
+    public UUID getId() { return id; }
+    public UUID getBatchId() { return batchId; }
+    public UUID getAccountId() { return accountId; }
+    public BigDecimal getExpectedBalance() { return expectedBalance; }
+    public BigDecimal getActualBalance() { return actualBalance; }
+    public String getDescription() { return description; }
+    public Instant getCreatedAt() { return createdAt; }
 }
