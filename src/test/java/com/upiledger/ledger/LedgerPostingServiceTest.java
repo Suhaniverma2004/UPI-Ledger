@@ -34,6 +34,7 @@ class LedgerPostingServiceTest {
         AccountBalance payer = new AccountBalance(payerId, "INR");
         payer.applyCredit(new BigDecimal("1000.00"));
         AccountBalance payee = new AccountBalance(payeeId, "INR");
+        payer.reserve(new BigDecimal("500.00"));
 
         when(accountBalanceRepository.findByIdForUpdate(payerId)).thenReturn(Optional.of(payer));
         when(accountBalanceRepository.findByIdForUpdate(payeeId)).thenReturn(Optional.of(payee));
@@ -95,6 +96,7 @@ class LedgerPostingServiceTest {
 
         AccountBalance payer = new AccountBalance(payerId, "INR");
         AccountBalance payee = new AccountBalance(payeeId, "INR");
+       
 
         when(accountBalanceRepository.findByIdForUpdate(payerId)).thenReturn(Optional.of(payer));
         when(accountBalanceRepository.findByIdForUpdate(payeeId)).thenReturn(Optional.of(payee));

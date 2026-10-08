@@ -42,7 +42,11 @@ public class LedgerPostingService {
         for (LedgerPostingLine line : lines) {
             AccountBalance balance = balances.get(line.accountId());
             if (line.entryType() == LedgerEntryType.DEBIT) {
-                balance.applyDebit(line.amount());
+                if (command.reason() == LedgerEntryReason.SETTLEMENT && line.entryType() == LedgerEntryType.DEBIT) {
+                    balance.applySettlementDebit(line.amount());
+                } else {
+                    balance.applyDebit(line.amount());
+                }
             } else {
                 balance.applyCredit(line.amount());
             }
