@@ -1,0 +1,13 @@
+target/
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+.DS_Store
+.env
+.env.*
+!.env.example
+docker-data/
+logs/
