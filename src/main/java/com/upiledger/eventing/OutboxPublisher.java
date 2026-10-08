@@ -1,10 +1,12 @@
 package com.upiledger.eventing;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -14,6 +16,9 @@ public class OutboxPublisher {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final OutboxEventService outboxEventService;
     private final KafkaTopics topics;
+
+    @Value("${upiledger.outbox.publisher.retry-delay-ms:5000}")
+    private long retryDelayMs;
 
     public OutboxPublisher(OutboxEventRepository repository,
                            KafkaTemplate<String, String> kafkaTemplate,
@@ -29,8 +34,14 @@ public class OutboxPublisher {
     public void publishPendingEvents() {
         List<OutboxEvent> events = repository.findTop100ByStatusInOrderByCreatedAtAsc(
                 List.of(OutboxStatus.PENDING, OutboxStatus.FAILED));
+
+        Instant now = Instant.now();
+        Duration retryDelay = Duration.ofMillis(retryDelayMs);
+
         for (OutboxEvent event : events) {
-            publishOne(event);
+            if (event.isRetryEligible(now, retryDelay)) {
+                publishOne(event);
+            }
         }
     }
 

@@ -3,6 +3,7 @@ package com.upiledger.eventing;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -89,5 +90,21 @@ public class OutboxEvent {
         this.attemptCount++;
         this.lastAttemptAt = attemptAt;
         this.lastError = error == null ? null : error.substring(0, Math.min(error.length(), 2000));
+    }
+
+    public boolean isRetryEligible(Instant now, Duration retryDelay) {
+        if (status == OutboxStatus.PENDING) {
+            return true;
+        }
+
+        if (status != OutboxStatus.FAILED) {
+            return false;
+        }
+
+        if (lastAttemptAt == null) {
+            return true;
+        }
+
+        return !lastAttemptAt.plus(retryDelay).isAfter(now);
     }
 }
